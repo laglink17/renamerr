@@ -1,0 +1,33 @@
+services:
+  animearr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: animearr
+    environment:
+      - PUID=$UID
+      - PGID=$GID
+      - TZ=$TZ
+    volumes:
+      - /home/user/docker/anime/sonarr:/config
+      - /mnt/storage/Media/Anime:/anime
+    ports:
+      - 9898:8989
+    restart: unless-stopped
+
+  renamerr:
+    image: renamerr:latest
+    container_name: renamerr
+    environment:
+      - SONARR_API_URL=http://animearr:8989/api/v3
+      - SONARR_API_KEY=$API
+      #- FILES_BASE_PATH=/files
+    volumes:
+      - /mnt/storage/Media/Anime:/anime
+    ports:
+      - 5000:5000
+    depends_on:
+      - animearr
+
+networks:
+  default:
+    name: downloads
+    external: true

@@ -7,7 +7,7 @@ app = Flask(__name__)
 # Environment variables
 SONARR_API_URL = os.getenv("SONARR_API_URL", "http://localhost:8989/api/v3")
 SONARR_API_KEY = os.getenv("SONARR_API_KEY")
-FILES_BASE_PATH = os.getenv("FILES_BASE_PATH", "/files")
+#FILES_BASE_PATH = os.getenv("FILES_BASE_PATH", "/files")
 
 # Headers for Sonarr API
 headers = {"X-Api-Key": SONARR_API_KEY}
