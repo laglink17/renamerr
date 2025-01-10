@@ -15,7 +15,13 @@ Focused on Anime Series, that most of the times gets a Translated Name from Sona
 
 ## Usage
 
-Select a Series from the list, and get the Alternative Names from Sonarr. Choose your prefered Alternative Name and press "Preview Rename" to see how the files will be renamed.
+Select a Series from the list, and get the Alternative Names from Sonarr. 
+
+![Renamerr_select](https://github.com/user-attachments/assets/fd291434-1656-4418-8c0f-185580e5f882)
+
+Choose your prefered Alternative Name and press "Preview Rename" to see how the files will be renamed.
+
+![renamerr_preview](https://github.com/user-attachments/assets/e425e786-a7ab-4e38-9697-ef4b8a95536b)
 
 Press the botom "Confirm Rename" to rename the files.
 
