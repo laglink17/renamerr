@@ -160,27 +160,30 @@ def preview_rename_files():
 @app.route("/confirm-rename", methods=["POST"])
 def confirm_rename_files():
     data = request.json
-    rename_preview = data.get("rename_preview", [])
+    rename_preview = data.get("rename_preview", {})
 
     try:
         renamed_files = []
 
-        for item in rename_preview:
-            current_path = item["current"]
-            new_path = os.path.join(os.path.dirname(current_path), item["new"])
+        # Iterate over each season and its episodes
+        for season, episodes in rename_preview.items():
+            for item in episodes:
+                current_path = item["current"]
+                new_path = item["new"]
 
-            # Check for duplicates before renaming
-            if new_path in [file["new"] for file in renamed_files]:
-                raise ValueError(f"Duplicate filename detected: {new_path}")
+                # Check for duplicates before renaming
+                if new_path in [file["new"] for file in renamed_files]:
+                    raise ValueError(f"Duplicate filename detected: {new_path}")
 
-            # Rename the file
-            os.rename(current_path, new_path)
-            renamed_files.append({"old": current_path, "new": new_path})
+                # Rename the file
+                os.rename(current_path, new_path)
+                renamed_files.append({"old": current_path, "new": new_path})
 
         return jsonify({"message": "Files renamed successfully", "renamed_files": renamed_files})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
