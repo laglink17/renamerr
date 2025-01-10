@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sonarr Renamer</title>
+    <script>
+        // Automatically load series on page load
+        window.onload = fetchSeries;
+
+        async function fetchSeries() {
+            const response = await fetch('/series');
+            const seriesList = await response.json();
+            const seriesSelect = document.getElementById('series-select');
+            seriesSelect.innerHTML = '';
+            seriesList.forEach(series => {
+                const option = document.createElement('option');
+                option.value = series.id;
+                option.textContent = series.title;
+                seriesSelect.appendChild(option);
+            });
+        }
+
+        async function fetchAlternativeTitles() {
+            const seriesId = document.getElementById('series-select').value;
+            if (!seriesId) return;
+            const response = await fetch(`/series/${seriesId}`);
+            const altTitles = await response.json();
+            const altTitlesSelect = document.getElementById('alt-titles-select');
+            altTitlesSelect.innerHTML = '';
+            altTitles.forEach(title => {
+                const option = document.createElement('option');
+                option.value = title.title;
+                option.textContent = title.title;
+                altTitlesSelect.appendChild(option);
+            });
+        }
+
+
+        async function previewRename() {
+            const seriesId = document.getElementById('series-select').value;
+            const chosenTitle = document.getElementById('alt-titles-select').value;
+            if (!seriesId || !chosenTitle) {
+                return alert('Select a series and a title first.');
+            }
+
+            const response = await fetch('/preview-rename', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ series_id: seriesId, chosen_title: chosenTitle }),
+            });
+            const result = await response.json();
+
+            if (result.error) {
+                alert(result.error);
+                return;
+            }
+
+            const currentTable = document.getElementById('current-names');
+            const newTable = document.getElementById('new-names');
+            currentTable.innerHTML = '';
+            newTable.innerHTML = '';
+
+            // Group episodes by season
+            Object.keys(result.rename_preview).forEach(season => {
+                const seasonHeader = `<tr><th colspan="2">Season ${season}</th></tr>`;
+                currentTable.innerHTML += seasonHeader;
+                newTable.innerHTML += seasonHeader;
+
+                result.rename_preview[season].forEach(item => {
+                    const currentRow = `<tr><td>${item.episode}</td><td>${item.current}</td></tr>`;
+                    const newRow = `<tr><td>${item.episode}</td><td>${item.new}</td></tr>`;
+                    currentTable.innerHTML += currentRow;
+                    newTable.innerHTML += newRow;
+                });
+            });
+
+            document.getElementById('confirm-btn').style.display = 'block';
+            document.getElementById('confirm-btn').onclick = () => confirmRename(result.rename_preview);
+    }
+
+        async function confirmRename(renamePreview) {
+            const response = await fetch('/confirm-rename', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rename_preview: renamePreview }),
+            });
+            const result = await response.json();
+            alert(result.message || result.error);
+        }
+    </script>
+</head>
+<body>
+    <h1>Sonarr Renamer</h1>
+    <label for="series-select">Select Series:</label>
+    <select id="series-select" onchange="fetchAlternativeTitles()"></select>
+    <br><br>
+    <label for="alt-titles-select">Select Alternative Title:</label>
+    <select id="alt-titles-select"></select>
+    <br><br>
+    <button onclick="previewRename()">Preview Rename</button>
+    <br><br>
+    <h2>Current Names</h2>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Episode</th>
+                <th>Filename</th>
+            </tr>
+        </thead>
+        <tbody id="current-names"></tbody>
+    </table>
+    <h2>New Names</h2>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Episode</th>
+                <th>Filename</th>
+            </tr>
+        </thead>
+        <tbody id="new-names"></tbody>
+    </table>
+    <button id="confirm-btn" style="display: none;">Confirm Rename</button>
+</body>
+</html>
