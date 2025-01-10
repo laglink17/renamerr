@@ -17,11 +17,17 @@ Focused on Anime Series, that most of the times gets a Translated Name from Sona
 
 Select a Series from the list, and get the Alternative Names from Sonarr. 
 
-![Renamerr_select](https://github.com/user-attachments/assets/fd291434-1656-4418-8c0f-185580e5f882)
+![renamerr_preview_v2](https://github.com/user-attachments/assets/f48d162c-20ba-4cb0-98eb-8c41ae97b18a)
 
-Choose your prefered Alternative Name and press "Preview Rename" to see how the files will be renamed.
+Choose your prefered Alternative Name and if you prefer to use Season Folders or a Single Folder, the press "Preview Rename" to see how the files will be renamed.
 
-![renamerr_preview](https://github.com/user-attachments/assets/e425e786-a7ab-4e38-9697-ef4b8a95536b)
+Season Folder:
+
+![renamerr_season](https://github.com/user-attachments/assets/7cf29e17-a66d-4286-b24d-23265e754132)
+
+Single Folder:
+
+![renamerr_single](https://github.com/user-attachments/assets/40d67dc2-5755-4cfd-abcd-35cf28ba3471)
 
 Press the botom "Confirm Rename" to rename the files.
 
