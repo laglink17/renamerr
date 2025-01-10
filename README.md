@@ -19,5 +19,10 @@ Select a Series from the list, and get the Alternative Names from Sonarr. Choose
 
 Press the botom "Confirm Rename" to rename the files.
 
-Enjoy!# renamerr
-Web Service Program to rename Anime Series from Sonarr
+Enjoy!
+
+## Warnings
+
+ - Sonarr and Renamerr **must have** the same path for the file. In the compose file, both are registered on /anime.
+ - Create the enviroment variables for UID, GID and API. 
+ - It's recommend to first create and configure Sonarr, before using this service. The API is needed to access Sonarr files.
