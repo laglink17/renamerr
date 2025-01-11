@@ -29,7 +29,7 @@ Single Folder:
 
 ![renamerr_single](https://github.com/user-attachments/assets/40d67dc2-5755-4cfd-abcd-35cf28ba3471)
 
-Press the botom "Confirm Rename" to rename the files.
+Press the button "Confirm Rename" to rename the files.
 
 Enjoy!
 
