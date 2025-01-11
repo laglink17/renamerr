@@ -19,7 +19,8 @@ services:
     environment:
       - SONARR_API_URL=http://animearr:8989/api/v3
       - SONARR_API_KEY=$API
-      #- FILES_BASE_PATH=/files
+      - PUID=$UID
+      - PGID=$GID      
     volumes:
       - /mnt/storage/Media/Anime:/anime
     ports:
