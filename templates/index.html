@@ -3,7 +3,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sonarr Renamer</title>
+    <title>Sonarr Anime Renamer</title>
+    <style>
+        :root {
+            --bg-primary: #1a1b1e;
+            --bg-secondary: #2c2d31;
+            --text-primary: #e1e1e1;
+            --text-secondary: #a1a1a1;
+            --accent: #4f46e5;
+            --accent-hover: #4338ca;
+            --border: #3f3f46;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            color: var(--text-primary);
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            margin: 2rem 0 1rem;
+            color: var(--text-primary);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+            background-color: var(--bg-secondary);
+            padding: 1.5rem;
+            border-radius: 8px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        select, button {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .radio-group {
+            margin: 1rem 0;
+        }
+
+        .radio-label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+        }
+
+        .radio-label input[type="radio"] {
+            margin-right: 0.5rem;
+        }
+
+        button {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+
+        #confirm-btn {
+            margin-top: 1rem;
+        }
+
+        .table-wrapper {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-x: auto;
+            margin-bottom: 2rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.5rem;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        tr:hover td {
+            background-color: rgba(79, 70, 229, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+        }
+    </style>
     <script>
         window.onload = fetchSeries;
 
@@ -38,13 +179,11 @@
         async function previewRename() {
             const seriesId = document.getElementById('series-select').value;
             const chosenTitle = document.getElementById('alt-titles-select').value;
-
-            // Get the selected file structure option
             const structureOption = document.querySelector('input[name="file-structure"]:checked').value;
             const useSeasonFolders = structureOption === "season_folders";
 
             if (!seriesId || !chosenTitle) {
-                return alert('Select a series and a title first.');
+                return alert('Please select both a series and a title first.');
             }
 
             const response = await fetch('/preview-rename', {
@@ -97,47 +236,58 @@
     </script>
 </head>
 <body>
-    <h1>Sonarr Renamer</h1>
-    <label for="series-select">Select Series:</label>
-    <select id="series-select" onchange="fetchAlternativeTitles()"></select>
-    <br><br>
-    <label for="alt-titles-select">Select Alternative Title:</label>
-    <select id="alt-titles-select"></select>
-    <br><br>
-    <label>Select File Structure:</label>
-    <br>
-    <label>
-        <input type="radio" name="file-structure" value="season_folders" checked>
-        Season Folders
-    </label>
-    <br>
-    <label>
-        <input type="radio" name="file-structure" value="single_folder">
-        Single Folder
-    </label>
-    <br><br>
-    <button onclick="previewRename()">Preview Rename</button>
-    <br><br>
-    <h2>Current Names</h2>
-    <table border="1">
-        <thead>
-            <tr>
-                <th>Episode</th>
-                <th>Filename</th>
-            </tr>
-        </thead>
-        <tbody id="current-names"></tbody>
-    </table>
-    <h2>New Names</h2>
-    <table border="1">
-        <thead>
-            <tr>
-                <th>Episode</th>
-                <th>Filename</th>
-            </tr>
-        </thead>
-        <tbody id="new-names"></tbody>
-    </table>
-    <button id="confirm-btn" style="display: none;">Confirm Rename</button>
+    <div class="container">
+        <h1>Sonarr Anime Renamer</h1>
+        
+        <div class="form-group">
+            <label for="series-select">Select Series</label>
+            <select id="series-select" onchange="fetchAlternativeTitles()"></select>
+            
+            <label for="alt-titles-select">Select Alternative Title</label>
+            <select id="alt-titles-select"></select>
+            
+            <div class="radio-group">
+                <label>File Structure</label>
+                <label class="radio-label">
+                    <input type="radio" name="file-structure" value="season_folders" checked>
+                    Season Folders
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="file-structure" value="single_folder">
+                    Single Folder
+                </label>
+            </div>
+            
+            <button onclick="previewRename()">Preview Rename</button>
+        </div>
+
+        <div class="table-wrapper">
+            <h2>Current Names</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Episode</th>
+                        <th>Filename</th>
+                    </tr>
+                </thead>
+                <tbody id="current-names"></tbody>
+            </table>
+        </div>
+
+        <div class="table-wrapper">
+            <h2>New Names</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Episode</th>
+                        <th>Filename</th>
+                    </tr>
+                </thead>
+                <tbody id="new-names"></tbody>
+            </table>
+        </div>
+
+        <button id="confirm-btn" style="display: none;">Confirm Rename</button>
+    </div>
 </body>
 </html>

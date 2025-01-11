@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sonarr Renamer</title>
     <script>
-        // Automatically load series on page load
         window.onload = fetchSeries;
 
         async function fetchSeries() {
@@ -39,6 +38,11 @@
         async function previewRename() {
             const seriesId = document.getElementById('series-select').value;
             const chosenTitle = document.getElementById('alt-titles-select').value;
+
+            // Get the selected file structure option
+            const structureOption = document.querySelector('input[name="file-structure"]:checked').value;
+            const useSeasonFolders = structureOption === "season_folders";
+
             if (!seriesId || !chosenTitle) {
                 return alert('Select a series and a title first.');
             }
@@ -46,10 +50,14 @@
             const response = await fetch('/preview-rename', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ series_id: seriesId, chosen_title: chosenTitle }),
+                body: JSON.stringify({
+                    series_id: seriesId,
+                    chosen_title: chosenTitle,
+                    use_season_folders: useSeasonFolders
+                }),
             });
-            const result = await response.json();
 
+            const result = await response.json();
             if (result.error) {
                 alert(result.error);
                 return;
@@ -60,11 +68,17 @@
             currentTable.innerHTML = '';
             newTable.innerHTML = '';
 
-            result.rename_preview.forEach(item => {
-                const currentRow = `<tr><td>${item.episode}</td><td>${item.current}</td></tr>`;
-                const newRow = `<tr><td>${item.episode}</td><td>${item.new}</td></tr>`;
-                currentTable.innerHTML += currentRow;
-                newTable.innerHTML += newRow;
+            Object.keys(result.rename_preview).forEach(season => {
+                const seasonHeader = `<tr><th colspan="2">Season ${season}</th></tr>`;
+                currentTable.innerHTML += seasonHeader;
+                newTable.innerHTML += seasonHeader;
+
+                result.rename_preview[season].forEach(item => {
+                    const currentRow = `<tr><td>${item.episode}</td><td>${item.current}</td></tr>`;
+                    const newRow = `<tr><td>${item.episode}</td><td>${item.new}</td></tr>`;
+                    currentTable.innerHTML += currentRow;
+                    newTable.innerHTML += newRow;
+                });
             });
 
             document.getElementById('confirm-btn').style.display = 'block';
@@ -89,6 +103,18 @@
     <br><br>
     <label for="alt-titles-select">Select Alternative Title:</label>
     <select id="alt-titles-select"></select>
+    <br><br>
+    <label>Select File Structure:</label>
+    <br>
+    <label>
+        <input type="radio" name="file-structure" value="season_folders" checked>
+        Season Folders
+    </label>
+    <br>
+    <label>
+        <input type="radio" name="file-structure" value="single_folder">
+        Single Folder
+    </label>
     <br><br>
     <button onclick="previewRename()">Preview Rename</button>
     <br><br>
