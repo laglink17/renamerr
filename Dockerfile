@@ -12,6 +12,10 @@ COPY templates ./templates
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Add default values for UID and GID
+ENV PUID=1000
+ENV PGID=100
+
 # Expose port for Flask
 EXPOSE 5000
 

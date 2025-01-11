@@ -78,10 +78,10 @@ def preview_rename_files():
     data = request.json
     series_id = int(data.get("series_id"))
     chosen_title = data.get("chosen_title")
-    use_season_folders = data.get("use_season_folders", True)  # Default to True
+    use_season_folders = data.get("use_season_folders", True)
     format_template = (
         "{Series_Title} - {episode:02d} [{Quality_Full} {MediaInfo_VideoCodec}]"
-        "[{Mediainfo_AudioCodec} {Mediainfo_AudioChannels}]-{Release_Group}.mkv"
+        "[{Mediainfo_AudioCodec} {Mediainfo_AudioChannels}]-{Release_Group}"
     )
 
     try:
@@ -121,9 +121,13 @@ def preview_rename_files():
             for episode in episodes:
                 episode_file = episode_files.get(episode["episodeFileId"])
                 if not episode_file:
-                    continue  # Skip episodes without a corresponding file
+                    continue
 
                 current_path = episode_file["path"]
+                current_dir = os.path.dirname(current_path)
+                # Get the original file extension
+                file_extension = os.path.splitext(current_path)[1]
+                
                 episode_label = (
                     episode["episodeNumber"] if use_season_folders else episode["absoluteEpisodeNumber"]
                 )
@@ -134,15 +138,12 @@ def preview_rename_files():
                 media_info = episode_file.get("mediaInfo", {})
                 video_codec = media_info.get("videoCodec", "")
                 audio_codec = media_info.get("audioCodec", "")
-
-                # Adjust audio channels
                 audio_channels = str(media_info.get("audioChannels", ""))
                 if audio_channels == "2":
                     audio_channels = "2.0"
-
                 release_group = episode_file.get("releaseGroup", "Unknown")
 
-                # Build new filename
+                # Build new filename with original extension
                 new_filename = format_template.format(
                     Series_Title=chosen_title,
                     episode=episode_label,
@@ -151,17 +152,27 @@ def preview_rename_files():
                     Mediainfo_AudioCodec=audio_codec,
                     Mediainfo_AudioChannels=audio_channels,
                     Release_Group=release_group,
-                )
+                ) + file_extension  # Add the original extension
 
-                # Determine new path
+                # Determine new path based on current location and desired structure
+                current_in_season = any(f"Season {i:02d}" for i in range(100) if f"Season {i:02d}" in current_path)
+                
                 if use_season_folders:
-                    new_path = os.path.join(
-                        os.path.dirname(current_path),
-                        f"Season {season:02d}",
-                        new_filename,
-                    )
+                    if current_in_season:
+                        # If already in season folder, keep it there
+                        new_path = os.path.join(current_dir, new_filename)
+                    else:
+                        # If not in season folder, create season folder structure
+                        base_dir = os.path.dirname(current_path)
+                        new_path = os.path.join(base_dir, f"Season {int(season):02d}", new_filename)
                 else:
-                    new_path = os.path.join(os.path.dirname(current_path), new_filename)
+                    if current_in_season:
+                        # If currently in season folder but moving to single folder,
+                        # place in parent directory
+                        new_path = os.path.join(os.path.dirname(os.path.dirname(current_path)), new_filename)
+                    else:
+                        # If already in single folder, keep it there
+                        new_path = os.path.join(current_dir, new_filename)
 
                 preview.append({
                     "episode": episode_label,
@@ -176,9 +187,15 @@ def preview_rename_files():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+import os
 
 @app.route("/confirm-rename", methods=["POST"])
 def confirm_rename_files():
+        
+    # Fetch UID and GID from environment variables
+    UID = int(os.getenv("PUID", 1000))
+    GID = int(os.getenv("PGID", 100))
+
     data = request.json
     rename_preview = data.get("rename_preview", {})
 
@@ -189,12 +206,38 @@ def confirm_rename_files():
             for item in episodes:
                 current_path = item["current"]
                 new_path = item["new"]
+                current_dir = os.path.dirname(current_path)
+                
+                # Check if current path is in a season folder
+                current_in_season = any(f"Season {i:02d}" for i in range(100) if f"Season {i:02d}" in current_path)
+                
+                # Check if new path should be in season folder
+                new_in_season = any(f"Season {i:02d}" for i in range(100) if f"Season {i:02d}" in new_path)
+                
+                if current_in_season and not new_in_season:
+                    # If moving from season folder to single folder,
+                    # place the file in the parent directory
+                    parent_dir = os.path.dirname(os.path.dirname(current_path))
+                    filename = os.path.basename(new_path)
+                    new_path = os.path.join(parent_dir, filename)
+                elif not current_in_season and new_in_season:
+                    # If moving from single folder to season folder,
+                    # create the season folder in the current directory
+                    season_folder = f"Season {int(season):02d}"
+                    new_path = os.path.join(current_dir, season_folder, os.path.basename(new_path))
+                elif current_in_season and new_in_season:
+                    # If already in season folder and should stay in season folder,
+                    # just rename in the current folder
+                    new_path = os.path.join(current_dir, os.path.basename(new_path))
 
-                # Ensure the folder exists
+                # Create any necessary directories
                 os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                os.chmod(os.path.dirname(new_path), 0o2775)
+                os.chown(os.path.dirname(new_path), UID, GID)
 
                 # Rename the file
                 os.rename(current_path, new_path)
+                os.chown(new_path, UID, GID)
                 renamed_files.append({"old": current_path, "new": new_path})
 
         return jsonify({"message": "Files renamed successfully", "renamed_files": renamed_files})
