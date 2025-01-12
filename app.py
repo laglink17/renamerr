@@ -81,7 +81,7 @@ def preview_rename_files():
     use_season_folders = data.get("use_season_folders", True)
     format_template = (
         "{Series_Title} - {episode:02d} [{Quality_Full} {MediaInfo_VideoCodec}]"
-        "[{Mediainfo_AudioCodec} {Mediainfo_AudioChannels}]-{Release_Group}"
+        "[{Mediainfo_AudioCodec} {Mediainfo_AudioChannels}]{Release_Group}"
     )
 
     try:
@@ -141,7 +141,13 @@ def preview_rename_files():
                 audio_channels = str(media_info.get("audioChannels", ""))
                 if audio_channels == "2":
                     audio_channels = "2.0"
-                release_group = episode_file.get("releaseGroup", "Unknown")
+                release_group = episode_file.get("releaseGroup", None)
+
+                # Conditionally include release group in the filename
+                if release_group:
+                    release_group_part = f"-{release_group}"
+                else:
+                    release_group_part = ""
 
                 # Build new filename with original extension
                 new_filename = format_template.format(
@@ -151,7 +157,7 @@ def preview_rename_files():
                     MediaInfo_VideoCodec=video_codec,
                     Mediainfo_AudioCodec=audio_codec,
                     Mediainfo_AudioChannels=audio_channels,
-                    Release_Group=release_group,
+                    Release_Group=release_group_part,
                 ) + file_extension  # Add the original extension
 
                 # Determine new path based on current location and desired structure

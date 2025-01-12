@@ -20,7 +20,7 @@ services:
       - SONARR_API_URL=http://animearr:8989/api/v3
       - SONARR_API_KEY=$API
       - PUID=$UID
-      - PGID=$GID      
+      - PGID=$GID
     volumes:
       - /mnt/storage/Media/Anime:/anime
     ports:
