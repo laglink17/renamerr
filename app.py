@@ -225,6 +225,7 @@ def confirm_rename_files():
 
     data = request.json
     rename_preview = data.get("rename_preview", {})
+    series_id = int(data.get("series_id"))  # Make sure series_id is included in the request
 
     try:
         renamed_files = []
@@ -267,10 +268,38 @@ def confirm_rename_files():
                 os.chown(new_path, UID, GID)
                 renamed_files.append({"old": current_path, "new": new_path})
 
-        return jsonify({"message": "Files renamed successfully", "renamed_files": renamed_files})
+        # After successful rename, trigger a rescan in Sonarr
+        rescan_response = requests.post(
+            f"{SONARR_API_URL}/command",
+            headers=headers,
+            json={
+                "name": "RescanSeries",
+                "seriesId": series_id
+            }
+        )
+
+        # Check rescan response
+        if rescan_response.status_code != 201:
+            return jsonify({
+                "message": "Files renamed successfully, but failed to trigger rescan in Sonarr.",
+                "renamed_files": renamed_files,
+                "rescan_error": f"Sonarr API returned status code {rescan_response.status_code}: {rescan_response.text}"
+            }), 207  # Using 207 Multi-Status to indicate partial success
+
+        # Everything succeeded
+        return jsonify({
+            "message": "Files renamed successfully and Sonarr rescan triggered.",
+            "renamed_files": renamed_files
+        })
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({
+            "error": f"Error during rename operation: {str(e)}"
+        }), 500
+    #     return jsonify({"message": "Files renamed successfully", "renamed_files": renamed_files})
+
+    # except Exception as e:
+    #     return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     initialize_database()

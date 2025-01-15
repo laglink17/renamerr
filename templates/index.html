@@ -251,19 +251,49 @@
         async function confirmRename(renamePreview) {
             const seriesId = document.getElementById('series-select').value;
             const chosenTitle = document.getElementById('alt-titles-select').value;
+            
+            try {
+                const response = await fetch('/confirm-rename', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        series_id: seriesId,
+                        chosen_title: chosenTitle, 
+                        rename_preview: renamePreview 
+                    }),
+                });
 
-            const response = await fetch('/confirm-rename', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    series_id: seriesId,
-                    chosen_title: chosenTitle,
-                    rename_preview: renamePreview,
-                }),
-            });
+                const result = await response.json();
+        
+                if (response.status === 207) {
+                    // Partial success - files renamed but rescan failed
+                    alert(`${result.message}\nError: ${result.rescan_error}`);
+                } else if (response.ok) {
+                    // Complete success
+                alert(result.message);
+                } else {
+                    // Error occurred
+                    alert(`Error: ${result.error || 'Unknown error occurred'}`);
+                }
+        
+                // Refresh the file list after rename
+                fetchAlternativeTitles();
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
 
-            const result = await response.json();
-            alert(result.message || result.error);
+            // const response = await fetch('/confirm-rename', {
+            //     method: 'POST',
+            //     headers: { 'Content-Type': 'application/json' },
+            //     body: JSON.stringify({
+            //         series_id: seriesId,
+            //         chosen_title: chosenTitle,
+            //         rename_preview: renamePreview,
+            //     }),
+            // });
+
+            // const result = await response.json();
+            // alert(result.message || result.error);
         }
     </script>
 </head>
