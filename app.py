@@ -1,43 +1,56 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template # type: ignore
 import os
 import requests
+import sqlite3
+import re
 
 app = Flask(__name__)
 
 # Environment variables
 SONARR_API_URL = os.getenv("SONARR_API_URL", "http://localhost:8989/api/v3")
 SONARR_API_KEY = os.getenv("SONARR_API_KEY")
-#FILES_BASE_PATH = os.getenv("FILES_BASE_PATH", "/files")
 
 # Headers for Sonarr API
 headers = {"X-Api-Key": SONARR_API_KEY}
 
-def build_new_filename(episode, alternative_title, format_template):
-    """Construct a new filename based on the format template."""
-    # Extract necessary data from the episode
-    absolute = episode.get("absoluteEpisodeNumber", 0)
-    quality = episode["quality"]["quality"]["name"]
-    media_info = episode.get("mediaInfo", {})
-    video_codec = media_info.get("videoCodec", "")
-    audio_codec = media_info.get("audioCodec", "")
-    audio_channels = media_info.get("audioChannels", "")
-    video_dynamic_range = media_info.get("videoDynamicRangeType", "")
-    release_group = episode.get("releaseGroup", "Unknown")
+DB_PATH = "/config/renamerr.db"
 
-    # Replace placeholders in the format template
-    new_filename = format_template.format(
-        Series_Title=alternative_title,
-        absolute=f"{absolute:02d}",
-        Custom_Formats="",
-        Quality_Full=quality,
-        MediaInfo_VideoDynamicRangeType=video_dynamic_range,
-        MediaInfo_VideoCodec=video_codec,
-        Mediainfo_AudioCodec=audio_codec,
-        Mediainfo_AudioChannels=audio_channels,
-        Release_Group=release_group,
-    )
+def initialize_database():
+    """Initialize the SQLite database."""
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
 
-    return new_filename
+    # Create the table if it doesn't exist
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS series_titles (
+            series_id INTEGER PRIMARY KEY,
+            chosen_title TEXT NOT NULL
+        );
+    """)
+    conn.commit()
+    conn.close()
+
+def get_stored_title(series_id):
+    """Retrieve the stored chosen title for a series."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT chosen_title FROM series_titles WHERE series_id = ?", (series_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else None
+
+def store_chosen_title(series_id, chosen_title):
+    """Store or update the chosen title for a series."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO series_titles (series_id, chosen_title)
+        VALUES (?, ?)
+    """, (series_id, chosen_title))
+    conn.commit()
+    conn.close()
 
 @app.route('/')
 def home():
@@ -58,20 +71,26 @@ def get_series():
 
 @app.route('/series/<int:series_id>', methods=['GET'])
 def get_alternative_titles(series_id):
-    """Fetches alternative titles for a specific series."""
+    """Fetches alternative titles for a specific series and includes the stored title."""
     response = requests.get(f"{SONARR_API_URL}/series/{series_id}", headers=headers)
     if response.status_code != 200:
         return jsonify({"error": "Failed to fetch series details"}), response.status_code
 
     series_data = response.json()
     alt_titles = series_data.get("alternateTitles", [])
-    return jsonify([
-        {"title": title["title"]}
-        for title in alt_titles
-    ])
-
-import re
-import os
+    
+    # Get stored title
+    stored_title = get_stored_title(series_id)
+    
+    # Prepare the response with stored title information
+    titles_list = [{"title": title["title"], "isStored": title["title"] == stored_title} 
+                   for title in alt_titles]
+    
+    # If stored title exists but isn't in the alternative titles, add it
+    if stored_title and not any(t["title"] == stored_title for t in titles_list):
+        titles_list.insert(0, {"title": stored_title, "isStored": True})
+        
+    return jsonify(titles_list)
 
 @app.route("/preview-rename", methods=["POST"])
 def preview_rename_files():
@@ -79,6 +98,10 @@ def preview_rename_files():
     series_id = int(data.get("series_id"))
     chosen_title = data.get("chosen_title")
     use_season_folders = data.get("use_season_folders", True)
+
+    # Store the chosen title in the database
+    store_chosen_title(series_id, chosen_title)
+
     format_template = (
         "{Series_Title} - {episode:02d} [{Quality_Full} {MediaInfo_VideoCodec}]"
         "[{Mediainfo_AudioCodec} {Mediainfo_AudioChannels}]{Release_Group}"
@@ -193,8 +216,6 @@ def preview_rename_files():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-import os
-
 @app.route("/confirm-rename", methods=["POST"])
 def confirm_rename_files():
         
@@ -252,4 +273,5 @@ def confirm_rename_files():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
+    initialize_database()
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -23,6 +23,7 @@ services:
       - PGID=$GID
     volumes:
       - /mnt/storage/Media/Anime:/anime
+      - /home/user/docker/anime/renamerr/config:/config
     ports:
       - 5000:5000
     depends_on:

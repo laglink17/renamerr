@@ -160,7 +160,8 @@
             const response = await fetch('/series');
             const seriesList = await response.json();
             const seriesSelect = document.getElementById('series-select');
-            seriesSelect.innerHTML = '';
+            // seriesSelect.innerHTML = '';
+            seriesSelect.innerHTML = '<option value="">Select a series</option>';
             seriesList.forEach(series => {
                 const option = document.createElement('option');
                 option.value = series.id;
@@ -172,17 +173,32 @@
         async function fetchAlternativeTitles() {
             const seriesId = document.getElementById('series-select').value;
             if (!seriesId) return;
+
             const response = await fetch(`/series/${seriesId}`);
             const altTitles = await response.json();
+
             const altTitlesSelect = document.getElementById('alt-titles-select');
-            altTitlesSelect.innerHTML = '';
+            // altTitlesSelect.innerHTML = '';
+            altTitlesSelect.innerHTML = '<option value="">Select a title</option>';
+            
+            // Sort titles to put stored title first
+            altTitles.sort((a, b) => {
+                if (a.isStored) return -1;
+                if (b.isStored) return 1;
+                return 0;
+            });
+
             altTitles.forEach(title => {
                 const option = document.createElement('option');
                 option.value = title.title;
-                option.textContent = title.title;
+                option.textContent = title.isStored ? `${title.title} (Current)` : title.title;
+                if (title.isStored) {
+                    option.selected = true;
+                }
                 altTitlesSelect.appendChild(option);
             });
         }
+
 
         async function previewRename() {
             const seriesId = document.getElementById('series-select').value;
@@ -234,11 +250,16 @@
 
         async function confirmRename(renamePreview) {
             const seriesId = document.getElementById('series-select').value;
+            const chosenTitle = document.getElementById('alt-titles-select').value;
 
             const response = await fetch('/confirm-rename', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ series_id: seriesId, rename_preview: renamePreview }),
+                body: JSON.stringify({
+                    series_id: seriesId,
+                    chosen_title: chosenTitle,
+                    rename_preview: renamePreview,
+                }),
             });
 
             const result = await response.json();
