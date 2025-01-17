@@ -175,20 +175,18 @@
             if (!seriesId) return;
 
             const response = await fetch(`/series/${seriesId}`);
-            const altTitles = await response.json();
-
+            const data = await response.json();
             const altTitlesSelect = document.getElementById('alt-titles-select');
-            // altTitlesSelect.innerHTML = '';
             altTitlesSelect.innerHTML = '<option value="">Select a title</option>';
             
             // Sort titles to put stored title first
-            altTitles.sort((a, b) => {
+            data.titles.sort((a, b) => {
                 if (a.isStored) return -1;
                 if (b.isStored) return 1;
                 return 0;
             });
 
-            altTitles.forEach(title => {
+            data.titles.forEach(title => {
                 const option = document.createElement('option');
                 option.value = title.title;
                 option.textContent = title.isStored ? `${title.title} (Current)` : title.title;
@@ -197,7 +195,14 @@
                 }
                 altTitlesSelect.appendChild(option);
             });
+
+            // Set the folder structure radio button based on stored preference
+            if (data.stored_info) {
+                const folderStructure = data.stored_info.use_season_folders ? 'season_folders' : 'single_folder';
+                document.querySelector(`input[name="file-structure"][value="${folderStructure}"]`).checked = true;
+            }
         }
+        
 
 
         async function previewRename() {
@@ -281,19 +286,6 @@
             } catch (error) {
                 alert(`Error: ${error.message}`);
             }
-
-            // const response = await fetch('/confirm-rename', {
-            //     method: 'POST',
-            //     headers: { 'Content-Type': 'application/json' },
-            //     body: JSON.stringify({
-            //         series_id: seriesId,
-            //         chosen_title: chosenTitle,
-            //         rename_preview: renamePreview,
-            //     }),
-            // });
-
-            // const result = await response.json();
-            // alert(result.message || result.error);
         }
     </script>
 </head>

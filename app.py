@@ -26,29 +26,55 @@ def initialize_database():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS series_titles (
             series_id INTEGER PRIMARY KEY,
-            chosen_title TEXT NOT NULL
+            chosen_title TEXT NOT NULL,
+            use_season_folders BOOLEAN NOT NULL DEFAULT 1
         );
     """)
     conn.commit()
     conn.close()
 
-def get_stored_title(series_id):
-    """Retrieve the stored chosen title for a series."""
+def get_stored_series_info(series_id):
+    """Retrieve the stored info for a series."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT chosen_title FROM series_titles WHERE series_id = ?", (series_id,))
+    cursor.execute(
+        "SELECT chosen_title, use_season_folders FROM series_titles WHERE series_id = ?", 
+        (series_id,)
+    )
     result = cursor.fetchone()
     conn.close()
-    return result[0] if result else None
+    
+    if result:
+        return {
+            "chosen_title": result[0],
+            "use_season_folders": bool(result[1])
+        }
+    return None
 
-def store_chosen_title(series_id, chosen_title):
-    """Store or update the chosen title for a series."""
+def get_all_stored_series():
+    """Retrieve all series information from the database."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT series_id, chosen_title, use_season_folders FROM series_titles")
+    results = cursor.fetchall()
+    conn.close()
+    return {
+        str(series_id): {
+            "chosen_title": title,
+            "use_season_folders": bool(use_season_folders)
+        }
+        for series_id, title, use_season_folders in results
+    }
+
+def store_series_info(series_id, chosen_title, use_season_folders):
+    """Store or update the series information."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT OR REPLACE INTO series_titles (series_id, chosen_title)
-        VALUES (?, ?)
-    """, (series_id, chosen_title))
+        INSERT OR REPLACE INTO series_titles 
+        (series_id, chosen_title, use_season_folders)
+        VALUES (?, ?, ?)
+    """, (series_id, chosen_title, use_season_folders))
     conn.commit()
     conn.close()
 
@@ -71,7 +97,7 @@ def get_series():
 
 @app.route('/series/<int:series_id>', methods=['GET'])
 def get_alternative_titles(series_id):
-    """Fetches alternative titles for a specific series and includes the stored title."""
+    """Fetches alternative titles for a specific series and includes the stored info."""
     response = requests.get(f"{SONARR_API_URL}/series/{series_id}", headers=headers)
     if response.status_code != 200:
         return jsonify({"error": "Failed to fetch series details"}), response.status_code
@@ -79,18 +105,25 @@ def get_alternative_titles(series_id):
     series_data = response.json()
     alt_titles = series_data.get("alternateTitles", [])
     
-    # Get stored title
-    stored_title = get_stored_title(series_id)
+    # Get stored info
+    stored_info = get_stored_series_info(series_id)
     
-    # Prepare the response with stored title information
-    titles_list = [{"title": title["title"], "isStored": title["title"] == stored_title} 
-                   for title in alt_titles]
+    # Prepare the response
+    response_data = {
+        "titles": [{"title": title["title"], 
+                   "isStored": stored_info and title["title"] == stored_info["chosen_title"]} 
+                  for title in alt_titles],
+        "stored_info": stored_info
+    }
     
     # If stored title exists but isn't in the alternative titles, add it
-    if stored_title and not any(t["title"] == stored_title for t in titles_list):
-        titles_list.insert(0, {"title": stored_title, "isStored": True})
+    if stored_info and not any(t["title"] == stored_info["chosen_title"] for t in response_data["titles"]):
+        response_data["titles"].insert(0, {
+            "title": stored_info["chosen_title"],
+            "isStored": True
+        })
         
-    return jsonify(titles_list)
+    return jsonify(response_data)
 
 @app.route("/preview-rename", methods=["POST"])
 def preview_rename_files():
@@ -99,8 +132,8 @@ def preview_rename_files():
     chosen_title = data.get("chosen_title")
     use_season_folders = data.get("use_season_folders", True)
 
-    # Store the chosen title in the database
-    store_chosen_title(series_id, chosen_title)
+    # Store the series information in the database
+    store_series_info(series_id, chosen_title, use_season_folders)
 
     format_template = (
         "{Series_Title} - {episode:02d} [{Quality_Full} {MediaInfo_VideoCodec}]"
@@ -296,10 +329,202 @@ def confirm_rename_files():
         return jsonify({
             "error": f"Error during rename operation: {str(e)}"
         }), 500
-    #     return jsonify({"message": "Files renamed successfully", "renamed_files": renamed_files})
 
-    # except Exception as e:
-    #     return jsonify({"error": str(e)}), 500
+@app.route("/api/autorename", methods=["POST"])
+def auto_rename():
+    """
+    API endpoint to auto-rename files for specific series or all series with stored info.
+    
+    Request body (optional):
+    {
+        "series_ids": ["123", "456"]  # Optional list of series IDs to process
+    }
+    """
+    try:
+        data = request.json or {}
+        specific_series_ids = data.get("series_ids", [])
+        
+        # Get stored series information from database
+        stored_series = get_all_stored_series()
+        
+        # If specific series IDs provided, filter stored_series
+        if specific_series_ids:
+            stored_series = {
+                series_id: info 
+                for series_id, info in stored_series.items() 
+                if series_id in specific_series_ids
+            }
+        
+        if not stored_series:
+            return jsonify({
+                "error": "No stored information found for the specified series"
+            }), 404
+
+        # Process each series
+        results = {}
+        for series_id, info in stored_series.items():
+            results[series_id] = process_series_rename(
+                int(series_id),
+                info["chosen_title"],
+                info["use_season_folders"]
+            )
+
+        # Check if any series was processed successfully
+        any_success = any(
+            result.get("success", False) 
+            for result in results.values()
+        )
+        
+        if not any_success:
+            return jsonify({
+                "error": "Failed to process any series",
+                "results": results
+            }), 500
+
+        return jsonify({
+            "message": "Auto-rename process completed",
+            "results": results
+        })
+
+    except Exception as e:
+        return jsonify({
+            "error": f"Error during auto-rename: {str(e)}"
+        }), 500
+
+def process_series_rename(series_id, chosen_title, use_season_folders):
+    """
+    Process rename for a single series.
+    
+    Args:
+        series_id (int): The ID of the series to process
+        chosen_title (str): The title to use for renaming
+        use_season_folders (bool): Whether to use season folders structure
+    """
+    try:
+        # Fetch episode details
+        episode_response = requests.get(
+            f"{SONARR_API_URL}/episode?seriesId={series_id}", 
+            headers=headers
+        )
+        if episode_response.status_code != 200:
+            return {"error": f"Failed to fetch episodes for series {series_id}"}
+
+        episodes = episode_response.json()
+        episodes_with_files = [ep for ep in episodes if ep.get("hasFile")]
+
+        # Fetch episode files
+        file_response = requests.get(
+            f"{SONARR_API_URL}/episodefile?seriesId={series_id}", 
+            headers=headers
+        )
+        if file_response.status_code != 200:
+            return {"error": f"Failed to fetch episode files for series {series_id}"}
+
+        episode_files = {file["id"]: file for file in file_response.json()}
+
+        # Generate rename preview
+        rename_preview = {}
+        for episode in episodes_with_files:
+            season = episode["seasonNumber"]
+            if season not in rename_preview:
+                rename_preview[season] = []
+            
+            episode_file = episode_files.get(episode["episodeFileId"])
+            if not episode_file:
+                continue
+
+            current_path = episode_file["path"]
+            current_dir = os.path.dirname(current_path)
+            file_extension = os.path.splitext(current_path)[1]
+            
+            episode_label = (
+                episode["episodeNumber"] if use_season_folders 
+                else episode["absoluteEpisodeNumber"]
+            )
+            
+            if episode_label is None:
+                continue
+
+            # Build new filename using the same format as in preview_rename
+            quality = episode_file["quality"]["quality"]["name"]
+            media_info = episode_file.get("mediaInfo", {})
+            video_codec = media_info.get("videoCodec", "")
+            audio_codec = media_info.get("audioCodec", "")
+            audio_channels = str(media_info.get("audioChannels", ""))
+            if audio_channels == "2":
+                audio_channels = "2.0"
+            release_group = episode_file.get("releaseGroup", "")
+            release_group_part = f"-{release_group}" if release_group else ""
+
+            new_filename = (
+                f"{chosen_title} - {episode_label:02d} "
+                f"[{quality} {video_codec}]"
+                f"[{audio_codec} {audio_channels}]"
+                f"{release_group_part}{file_extension}"
+            )
+
+            # Determine new path based on folder structure preference
+            current_in_season = any(f"Season {i:02d}" for i in range(100) if f"Season {i:02d}" in current_path)
+            
+            if use_season_folders:
+                if current_in_season:
+                    new_path = os.path.join(current_dir, new_filename)
+                else:
+                    base_dir = os.path.dirname(current_path)
+                    new_path = os.path.join(base_dir, f"Season {int(season):02d}", new_filename)
+            else:
+                if current_in_season:
+                    new_path = os.path.join(os.path.dirname(os.path.dirname(current_path)), new_filename)
+                else:
+                    new_path = os.path.join(current_dir, new_filename)
+
+            rename_preview[season].append({
+                "episode": episode_label,
+                "current": current_path,
+                "new": new_path
+            })
+
+        # Execute rename
+        UID = int(os.getenv("PUID", 1000))
+        GID = int(os.getenv("PGID", 100))
+        renamed_files = []
+
+        for season, episodes in rename_preview.items():
+            for item in episodes:
+                current_path = item["current"]
+                new_path = item["new"]
+                
+                # Create directories if needed
+                os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                os.chmod(os.path.dirname(new_path), 0o2775)
+                os.chown(os.path.dirname(new_path), UID, GID)
+
+                # Rename file
+                os.rename(current_path, new_path)
+                os.chown(new_path, UID, GID)
+                renamed_files.append({
+                    "old": current_path,
+                    "new": new_path
+                })
+
+        # Trigger Sonarr rescan
+        rescan_response = requests.post(
+            f"{SONARR_API_URL}/command",
+            headers=headers,
+            json={
+                "name": "RescanSeries",
+                "seriesId": series_id
+            }
+        )
+
+        return {
+            "success": True,
+            "renamed_files": renamed_files,
+            "rescan_status": "success" if rescan_response.status_code == 201 else "failed"
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     initialize_database()
