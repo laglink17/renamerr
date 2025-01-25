@@ -1,3 +1,4 @@
+import logging
 from flask import Flask, request, jsonify, render_template  # type: ignore
 import os
 import requests
@@ -5,6 +6,10 @@ import sqlite3
 import re
 
 app = Flask(__name__)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Environment variables
 SONARR_API_URL = os.getenv("SONARR_API_URL", "http://localhost:8989/api/v3")
@@ -132,13 +137,25 @@ def determine_new_path(current_path, new_filename, season, use_season_folders):
     
     return new_path
 
+# def check_if_already_renamed(current_path, new_path):
+#     """Check if the file is already renamed."""
+#     return os.path.basename(current_path) == os.path.basename(new_path)
+
 def rename_file(current_path, new_path, UID, GID):
     """Rename a file and set permissions."""
+    # Check if the file is already renamed    
+    # if os.path.basename(current_path) == os.path.basename(new_path):
+    #     return {"status": "already_renamed", "message": "Already renamed, nothing to do."}
+    # else:
+    # Create any necessary directories
     os.makedirs(os.path.dirname(new_path), exist_ok=True)
     os.chmod(os.path.dirname(new_path), 0o2775)
     os.chown(os.path.dirname(new_path), UID, GID)
+    # Rename the file
     os.rename(current_path, new_path)
     os.chown(new_path, UID, GID)
+    logger.info(f"File renamed: {current_path} -> {new_path}")
+    return {"status": "renamed", "message": "File renamed successfully."}
 
 @app.route('/')
 def home():
@@ -149,6 +166,7 @@ def get_series():
     """Fetches all series from Sonarr."""
     response = requests.get(f"{SONARR_API_URL}/series", headers=headers)
     if response.status_code != 200:
+        logger.error("Failed to fetch series from Sonarr")
         return jsonify({"error": "Failed to fetch series"}), response.status_code
 
     series_list = response.json()
@@ -162,6 +180,7 @@ def get_alternative_titles(series_id):
     """Fetches alternative titles for a specific series and includes the stored info."""
     response = requests.get(f"{SONARR_API_URL}/series/{series_id}", headers=headers)
     if response.status_code != 200:
+        logger.error(f"Failed to fetch series details for series ID {series_id}")
         return jsonify({"error": "Failed to fetch series details"}), response.status_code
 
     series_data = response.json()
@@ -203,6 +222,7 @@ def preview_rename_files():
             f"{SONARR_API_URL}/episode?seriesId={series_id}", headers=headers
         )
         if episode_response.status_code != 200:
+            logger.error(f"Failed to fetch episode details for series ID {series_id}")
             return jsonify({"error": "Failed to fetch episode details"}), episode_response.status_code
 
         episodes = episode_response.json()
@@ -215,6 +235,7 @@ def preview_rename_files():
             f"{SONARR_API_URL}/episodefile?seriesId={series_id}", headers=headers
         )
         if file_response.status_code != 200:
+            logger.error(f"Failed to fetch episode files for series ID {series_id}")
             return jsonify({"error": "Failed to fetch episode files"}), file_response.status_code
 
         episode_files = {file["id"]: file for file in file_response.json()}
@@ -248,17 +269,31 @@ def preview_rename_files():
                 new_filename = generate_new_filename(episode_file, chosen_title, episode_label, file_extension)
                 new_path = determine_new_path(current_path, new_filename, season, use_season_folders)
 
-                preview.append({
-                    "episode": episode_label,
-                    "current": current_path,
-                    "new": new_path,
-                })
+                # Check if the file is already renamed
+                if os.path.basename(current_path) == os.path.basename(new_path):        
+                #if check_if_already_renamed(current_path, new_path):
+                    preview.append({
+                        "episode": episode_label,
+                        "current": current_path,
+                        "new": new_path,
+                        "status": "already_renamed",
+                        "message": "Already renamed, nothing to do."
+                    })
+                else:
+                    preview.append({
+                        "episode": episode_label,
+                        "current": current_path,
+                        "new": new_path,
+                        "status": "needs_rename",
+                        "message": "File needs to be renamed."
+                    })
 
             rename_preview[season] = preview
 
         return jsonify({"rename_preview": rename_preview})
 
     except Exception as e:
+        logger.error(f"Error during preview rename: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/confirm-rename", methods=["POST"])
@@ -273,14 +308,35 @@ def confirm_rename_files():
 
     try:
         renamed_files = []
+        logs = []
 
         for season, episodes in rename_preview.items():
             for item in episodes:
                 current_path = item["current"]
                 new_path = item["new"]
                 
-                rename_file(current_path, new_path, UID, GID)
-                renamed_files.append({"old": current_path, "new": new_path})
+                # Skip if the file is already renamed
+                if item.get("status") == "already_renamed":
+                    logs.append(f"No changes needed: {current_path}")
+                    renamed_files.append({
+                        "old": current_path,
+                        "new": new_path,
+                        "status": "already_renamed",
+                        "message": "Already renamed, nothing to do."
+                    })
+                else:
+                    # Rename the file
+                    #rename_result = rename_file(current_path, new_path, UID, GID)
+                    rename_file(current_path, new_path, UID, GID)
+                    logs.append(f"File renamed successfully.: {new_path}")
+                    renamed_files.append({
+                        "old": current_path,
+                        "new": new_path,
+                        #"status": rename_result["status"],
+                        #"message": rename_result["message"]
+                        "status": "renamed",
+                        "message": "File renamed successfully."
+                    })
 
         # After successful rename, trigger a rescan in Sonarr
         rescan_response = requests.post(
@@ -294,19 +350,24 @@ def confirm_rename_files():
 
         # Check rescan response
         if rescan_response.status_code != 201:
+            logs.append("Files renamed successfully, but failed to trigger rescan in Sonarr.")
             return jsonify({
                 "message": "Files renamed successfully, but failed to trigger rescan in Sonarr.",
                 "renamed_files": renamed_files,
-                "rescan_error": f"Sonarr API returned status code {rescan_response.status_code}: {rescan_response.text}"
+                "rescan_error": f"Sonarr API returned status code {rescan_response.status_code}: {rescan_response.text}",
+                "logs": logs
             }), 207  # Using 207 Multi-Status to indicate partial success
 
         # Everything succeeded
+        logs.append("Files renamed successfully and Sonarr rescan triggered.")
         return jsonify({
             "message": "Files renamed successfully and Sonarr rescan triggered.",
-            "renamed_files": renamed_files
+            "renamed_files": renamed_files,
+            "logs": logs
         })
 
     except Exception as e:
+        logger.error(f"Error during rename operation: {str(e)}")
         return jsonify({
             "error": f"Error during rename operation: {str(e)}"
         }), 500
@@ -337,6 +398,7 @@ def auto_rename():
             }
         
         if not stored_series:
+            logger.error("No stored information found for the specified series")
             return jsonify({
                 "error": "No stored information found for the specified series"
             }), 404
@@ -357,6 +419,7 @@ def auto_rename():
         )
         
         if not any_success:
+            logger.error("Failed to process any series")
             return jsonify({
                 "error": "Failed to process any series",
                 "results": results
@@ -368,6 +431,7 @@ def auto_rename():
         })
 
     except Exception as e:
+        logger.error(f"Error during auto-rename: {str(e)}")
         return jsonify({
             "error": f"Error during auto-rename: {str(e)}"
         }), 500
@@ -388,6 +452,7 @@ def process_series_rename(series_id, chosen_title, use_season_folders):
             headers=headers
         )
         if episode_response.status_code != 200:
+            logger.error(f"Failed to fetch episodes for series {series_id}")
             return {"error": f"Failed to fetch episodes for series {series_id}"}
 
         episodes = episode_response.json()
@@ -399,6 +464,7 @@ def process_series_rename(series_id, chosen_title, use_season_folders):
             headers=headers
         )
         if file_response.status_code != 200:
+            logger.error(f"Failed to fetch episode files for series {series_id}")
             return {"error": f"Failed to fetch episode files for series {series_id}"}
 
         episode_files = {file["id"]: file for file in file_response.json()}
@@ -428,11 +494,24 @@ def process_series_rename(series_id, chosen_title, use_season_folders):
             new_filename = generate_new_filename(episode_file, chosen_title, episode_label, file_extension)
             new_path = determine_new_path(current_path, new_filename, season, use_season_folders)
 
-            rename_preview[season].append({
-                "episode": episode_label,
-                "current": current_path,
-                "new": new_path
-            })
+            # Check if the file is already renamed
+            #if check_if_already_renamed(current_path, new_path):
+            if os.path.basename(current_path) == os.path.basename(new_path):
+                rename_preview[season].append({
+                    "episode": episode_label,
+                    "current": current_path,
+                    "new": new_path,
+                    "status": "already_renamed",
+                    "message": "Already renamed, nothing to do."
+                })
+            else:
+                rename_preview[season].append({
+                    "episode": episode_label,
+                    "current": current_path,
+                    "new": new_path,
+                    "status": "needs_rename",
+                    "message": "File needs to be renamed."
+                })
 
         # Execute rename
         UID = int(os.getenv("PUID", 1000))
@@ -444,11 +523,26 @@ def process_series_rename(series_id, chosen_title, use_season_folders):
                 current_path = item["current"]
                 new_path = item["new"]
                 
-                rename_file(current_path, new_path, UID, GID)
-                renamed_files.append({
-                    "old": current_path,
-                    "new": new_path
-                })
+                # Skip if the file is already renamed
+                if item.get("status") == "already_renamed":
+                    renamed_files.append({
+                        "old": current_path,
+                        "new": new_path,
+                        "status": "already_renamed",
+                        "message": "Already renamed, nothing to do."
+                    })
+                else:
+                    # Rename the file
+                    #rename_result = rename_file(current_path, new_path, UID, GID)
+                    rename_file(current_path, new_path, UID, GID)
+                    renamed_files.append({
+                        "old": current_path,
+                        "new": new_path,
+                        #"status": rename_result["status"],
+                        #"message": rename_result["message"]
+                        "status": "renamed",
+                        "message": "File renamed successfully."
+                    })
 
         # Trigger Sonarr rescan
         rescan_response = requests.post(
@@ -467,6 +561,7 @@ def process_series_rename(series_id, chosen_title, use_season_folders):
         }
 
     except Exception as e:
+        logger.error(f"Error during series rename: {str(e)}")
         return {"error": str(e)}
 
 if __name__ == "__main__":

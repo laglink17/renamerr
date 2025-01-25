@@ -143,6 +143,26 @@
             background-color: rgba(79, 70, 229, 0.1);
         }
 
+        .log-section {
+            background-color: var(--bg-secondary);
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .log-section h2 {
+            margin-top: 0;
+        }
+
+        .log-section pre {
+            background-color: var(--bg-primary);
+            padding: 0.75rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 300px;
+            font-size: 0.875rem;
+        }
+
         @media (max-width: 768px) {
             body {
                 padding: 0.75rem;
@@ -160,7 +180,6 @@
             const response = await fetch('/series');
             const seriesList = await response.json();
             const seriesSelect = document.getElementById('series-select');
-            // seriesSelect.innerHTML = '';
             seriesSelect.innerHTML = '<option value="">Select a series</option>';
             seriesList.forEach(series => {
                 const option = document.createElement('option');
@@ -203,8 +222,6 @@
             }
         }
         
-
-
         async function previewRename() {
             const seriesId = document.getElementById('series-select').value;
             const chosenTitle = document.getElementById('alt-titles-select').value;
@@ -280,6 +297,12 @@
                     // Error occurred
                     alert(`Error: ${result.error || 'Unknown error occurred'}`);
                 }
+
+                // Display logs
+                if (result.logs) {
+                    const logSection = document.getElementById('log-section');
+                    logSection.innerHTML = `<pre>${result.logs.join('\n')}</pre>`;
+                }
         
                 // Refresh the file list after rename
                 fetchAlternativeTitles();
@@ -341,8 +364,12 @@
             </table>
         </div>
 
+        <div class="log-section" id="log-section">
+            <h2>Logs</h2>
+            <pre></pre>
+        </div>
+
         <button id="confirm-btn" style="display: none;">Confirm Rename</button>
     </div>
 </body>
-</html>
 </html>
