@@ -292,16 +292,27 @@
                     alert(`${result.message}\nError: ${result.rescan_error}`);
                 } else if (response.ok) {
                     // Complete success
-                alert(result.message);
+                    let alertMessage = result.message;
+                    if (result.rescan_status === "not_triggered") {
+                        alertMessage += "\nNo files were renamed. Sonarr rescan skipped.";
+                    } else if (result.rescan_status === "failed") {
+                        alertMessage += "\nFiles renamed, but the rescan failed.";
+                    }
+                    alert(alertMessage);
                 } else {
                     // Error occurred
                     alert(`Error: ${result.error || 'Unknown error occurred'}`);
                 }
 
                 // Display logs
-                if (result.logs) {
+                // if (result.logs) {
+                //     const logSection = document.getElementById('log-section');
+                //     logSection.innerHTML = `<pre>${result.logs.join('\n')}</pre>`;
+                // }
+                if (result.renamed_files) {
                     const logSection = document.getElementById('log-section');
-                    logSection.innerHTML = `<pre>${result.logs.join('\n')}</pre>`;
+                    const logs = result.renamed_files.map(file => file.message).join('\n');
+                    logSection.innerHTML = `<pre>${logs}</pre>`;
                 }
         
                 // Refresh the file list after rename
