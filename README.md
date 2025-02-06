@@ -7,10 +7,9 @@ Focused on Anime Series, that most of the times gets a Translated Name from Sona
 # First Steps
 
  1. Clone or download this repository and added to your Docker server.
- 2. User Dockerfile to create an image for the service
-     `sudo docker build -t renamerr .`
- 3.  Create the docker services, using the docker-compose file.
-     `sudo docker compose up`
+ 2. Use the docker compose provided to build the image and run along with Sonarr.
+     `sudo docker compose up -d`
+ 3. Configure Sonarr at first, get the API Key and add it as a env variable.
  4. Access the service with http://{server-ip}:5000
 
 ## Usage

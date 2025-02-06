@@ -14,7 +14,9 @@ services:
     restart: unless-stopped
 
   renamerr:
-    image: renamerr:latest
+    build:
+      context: ./renamerr
+      dockerfile: Dockerfile
     container_name: renamerr
     environment:
       - SONARR_API_URL=http://animearr:8989/api/v3
