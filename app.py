@@ -21,9 +21,13 @@ headers = {"X-Api-Key": SONARR_API_KEY}
 DB_PATH = "/config/renamerr.db"
 
 # Format template for generating new filenames
+# format_template = (
+#     "{Series_Title} - {episode:02d} [{Quality_Full} {MediaInfo_VideoCodec}]"
+#     "[{Mediainfo_AudioCodec} {Mediainfo_AudioChannels}]{Release_Group}"
+# )
+## New Template format
 format_template = (
-    "{Series_Title} - {episode:02d} [{Quality_Full} {MediaInfo_VideoCodec}]"
-    "[{Mediainfo_AudioCodec} {Mediainfo_AudioChannels}]{Release_Group}"
+    "{Series_Title} - {episode:02d} [{Quality_Full} {MediaInfo_VideoCodec} {Mediainfo_AudioCodec}]{Release_Group}"
 )
 
 def initialize_database():
