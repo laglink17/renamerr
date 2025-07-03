@@ -13,6 +13,7 @@
             --accent: #4f46e5;
             --accent-hover: #4338ca;
             --border: #3f3f46;
+            --disabled: #3f3f46;
         }
 
         * {
@@ -91,6 +92,21 @@
 
         .radio-label input[type="radio"] {
             margin-right: 0.375rem;
+        }
+        
+        .radio-options {
+            display: flex;
+            gap: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .radio-options > div {
+            flex: 1;
+        }
+
+        .disabled {
+            opacity: 0.6;
+            pointer-events: none;
         }
 
         button {
@@ -215,10 +231,30 @@
                 altTitlesSelect.appendChild(option);
             });
 
-            // Set the folder structure radio button based on stored preference
+            // Set the folder structure and numbering based on stored preference
             if (data.stored_info) {
                 const folderStructure = data.stored_info.use_season_folders ? 'season_folders' : 'single_folder';
                 document.querySelector(`input[name="file-structure"][value="${folderStructure}"]`).checked = true;
+
+                const numberingStructure = data.stored_info.use_absolute_numbering ? 'absolute' : 'season';
+                document.querySelector(`input[name="numbering-structure"][value="${numberingStructure}"]`).checked = true;
+                
+                // Update numbering structure UI based on folder structure
+                updateNumberingStructureUI(folderStructure === 'single_folder');                
+            }
+        }
+
+        function updateNumberingStructureUI(isSingleFolder) {
+            const numberingContainer = document.getElementById('numbering-structure-container');
+            const seasonNumberingRadio = document.querySelector('input[name="numbering-structure"][value="season"]');
+            
+            if (isSingleFolder) {
+                numberingContainer.classList.add('disabled');
+                document.querySelector('input[name="numbering-structure"][value="absolute"]').checked = true;
+                seasonNumberingRadio.disabled = true;
+            } else {
+                numberingContainer.classList.remove('disabled');
+                seasonNumberingRadio.disabled = false;
             }
         }
         
@@ -226,7 +262,10 @@
             const seriesId = document.getElementById('series-select').value;
             const chosenTitle = document.getElementById('alt-titles-select').value;
             const structureOption = document.querySelector('input[name="file-structure"]:checked').value;
+            const numberingOption = document.querySelector('input[name="numbering-structure"]:checked').value;
+
             const useSeasonFolders = structureOption === "season_folders";
+            const useAbsoluteNumbering = numberingOption === "absolute";
 
             if (!seriesId || !chosenTitle) {
                 return alert('Please select both a series and a title first.');
@@ -238,7 +277,8 @@
                 body: JSON.stringify({
                     series_id: seriesId,
                     chosen_title: chosenTitle,
-                    use_season_folders: useSeasonFolders
+                    use_season_folders: useSeasonFolders,
+                    use_absolute_numbering: useAbsoluteNumbering
                 }),
             });
 
@@ -273,6 +313,11 @@
         async function confirmRename(renamePreview) {
             const seriesId = document.getElementById('series-select').value;
             const chosenTitle = document.getElementById('alt-titles-select').value;
+            const structureOption = document.querySelector('input[name="file-structure"]:checked').value;
+            const numberingOption = document.querySelector('input[name="numbering-structure"]:checked').value;
+            
+            const useSeasonFolders = structureOption === "season_folders";
+            const useAbsoluteNumbering = numberingOption === "absolute";
             
             try {
                 const response = await fetch('/confirm-rename', {
@@ -280,7 +325,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         series_id: seriesId,
-                        chosen_title: chosenTitle, 
+                        chosen_title: chosenTitle,
+                        use_season_folders: useSeasonFolders,
+                        use_absolute_numbering: useAbsoluteNumbering, 
                         rename_preview: renamePreview 
                     }),
                 });
@@ -321,6 +368,16 @@
                 alert(`Error: ${error.message}`);
             }
         }
+
+        // Add event listeners for folder structure changes
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileStructureRadios = document.querySelectorAll('input[name="file-structure"]');
+            fileStructureRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    updateNumberingStructureUI(this.value === 'single_folder');
+                });
+            });
+        });
     </script>
 </head>
 <body>
@@ -334,16 +391,34 @@
             <label for="alt-titles-select">Select Alternative Title</label>
             <select id="alt-titles-select"></select>
             
-            <div class="radio-group">
-                <label>File Structure</label>
-                <label class="radio-label">
-                    <input type="radio" name="file-structure" value="season_folders" checked>
-                    Season Folders
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="file-structure" value="single_folder">
-                    Single Folder
-                </label>
+            <div class="radio-options">
+                <div>
+                    <label>File Structure</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="file-structure" value="season_folders" checked>
+                            Season Folders
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="file-structure" value="single_folder">
+                            Single Folder
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="numbering-structure-container">
+                    <label>Numbering Structure</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="numbering-structure" value="absolute">
+                            Absolute
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="numbering-structure" value="season" checked>
+                            Season
+                        </label>
+                    </div>
+                </div>
             </div>
             
             <button onclick="previewRename()">Preview Rename</button>

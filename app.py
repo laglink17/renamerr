@@ -42,7 +42,8 @@ def initialize_database():
         CREATE TABLE IF NOT EXISTS series_titles (
             series_id INTEGER PRIMARY KEY,
             chosen_title TEXT NOT NULL,
-            use_season_folders BOOLEAN NOT NULL DEFAULT 1
+            use_season_folders BOOLEAN NOT NULL DEFAULT 1,
+            use_absolute_numbering BOOLEAN NOT NULL DEFAULT 0
         );
     """)
     conn.commit()
@@ -53,7 +54,7 @@ def get_stored_series_info(series_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT chosen_title, use_season_folders FROM series_titles WHERE series_id = ?", 
+        "SELECT chosen_title, use_season_folders, use_absolute_numbering FROM series_titles WHERE series_id = ?", 
         (series_id,)
     )
     result = cursor.fetchone()
@@ -62,7 +63,8 @@ def get_stored_series_info(series_id):
     if result:
         return {
             "chosen_title": result[0],
-            "use_season_folders": bool(result[1])
+            "use_season_folders": bool(result[1]),
+            "use_absolute_numbering": bool(result[2])
         }
     return None
 
@@ -70,26 +72,27 @@ def get_all_stored_series():
     """Retrieve all series information from the database."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT series_id, chosen_title, use_season_folders FROM series_titles")
+    cursor.execute("SELECT series_id, chosen_title, use_season_folders, use_absolute_numbering FROM series_titles")
     results = cursor.fetchall()
     conn.close()
     return {
         str(series_id): {
             "chosen_title": title,
-            "use_season_folders": bool(use_season_folders)
+            "use_season_folders": bool(use_season_folders),
+            "use_absolute_numbering": bool(use_absolute_numbering)
         }
-        for series_id, title, use_season_folders in results
+        for series_id, title, use_season_folders, use_absolute_numbering in results
     }
 
-def store_series_info(series_id, chosen_title, use_season_folders):
+def store_series_info(series_id, chosen_title, use_season_folders, use_absolute_numbering):
     """Store or update the series information."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT OR REPLACE INTO series_titles 
-        (series_id, chosen_title, use_season_folders)
-        VALUES (?, ?, ?)
-    """, (series_id, chosen_title, use_season_folders))
+        (series_id, chosen_title, use_season_folders, use_absolute_numbering)
+        VALUES (?, ?, ?, ?)
+    """, (series_id, chosen_title, use_season_folders, use_absolute_numbering))
     conn.commit()
     conn.close()
 
@@ -209,9 +212,14 @@ def preview_rename_files():
     series_id = int(data.get("series_id"))
     chosen_title = data.get("chosen_title")
     use_season_folders = data.get("use_season_folders", True)
+    use_absolute_numbering = data.get("use_absolute_numbering", False)
+
+    # If using single folder, force absolute numbering
+    if not use_season_folders:
+        use_absolute_numbering = True
 
     # Store the series information in the database
-    store_series_info(series_id, chosen_title, use_season_folders)
+    store_series_info(series_id, chosen_title, use_season_folders, use_absolute_numbering)
 
     try:
         # Fetch episode details
@@ -258,7 +266,8 @@ def preview_rename_files():
                 file_extension = os.path.splitext(current_path)[1]
                 
                 episode_label = (
-                    episode["episodeNumber"] if use_season_folders else episode["absoluteEpisodeNumber"]
+                    episode["absoluteEpisodeNumber"] if use_absolute_numbering 
+                    else episode["episodeNumber"]
                 )
                 if episode_label is None:
                     raise ValueError(f"Missing episode number for file: {current_path}")
@@ -338,7 +347,8 @@ def auto_rename():
             results[series_id] = process_rename(
                 series_id=int(series_id),
                 chosen_title=info["chosen_title"],
-                use_season_folders=info["use_season_folders"]
+                use_season_folders=info["use_season_folders"],
+                use_absolute_numbering=info.get("use_absolute_numbering", False)
             )
 
         # Check if any series was processed successfully
@@ -365,7 +375,7 @@ def auto_rename():
             "error": f"Error during auto-rename: {str(e)}"
         }), 500
 
-def process_rename(series_id=None, chosen_title=None, use_season_folders=True, rename_preview=None):
+def process_rename(series_id=None, chosen_title=None, use_season_folders=True, use_absolute_numbering=False, rename_preview=None):
     """
     Process rename for a single series or based on a rename preview.
     
@@ -445,8 +455,8 @@ def process_rename(series_id=None, chosen_title=None, use_season_folders=True, r
                 file_extension = os.path.splitext(current_path)[1]
                 
                 episode_label = (
-                    episode["episodeNumber"] if use_season_folders 
-                    else episode["absoluteEpisodeNumber"]
+                    episode["absoluteEpisodeNumber"] if use_absolute_numbering 
+                    else episode["episodeNumber"]
                 )
                 
                 if episode_label is None:
