@@ -181,6 +181,7 @@ def get_alternative_titles(series_id):
 
     series_data = response.json()
     alt_titles = series_data.get("alternateTitles", [])
+    alt_titles.insert(0, {"title": series_data["title"]})
     
     # Get stored info
     stored_info = get_stored_series_info(series_id)
